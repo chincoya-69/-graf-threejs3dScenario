@@ -1,0 +1,687 @@
+
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Escenario 3D - Taunt FBX</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #10131b;
+            color: white;
+        }
+
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            padding: 18px 22px;
+            background: rgba(0, 0, 0, 0.65);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            backdrop-filter: blur(8px);
+        }
+
+        #info h1 {
+            font-size: 20px;
+            margin-bottom: 8px;
+            color: #65d9ff;
+        }
+
+        #info p {
+            font-size: 13px;
+            color: #ddd;
+            margin-top: 5px;
+        }
+
+        #audioButton {
+            position: absolute;
+            bottom: 25px;
+            left: 25px;
+            z-index: 10;
+            padding: 13px 22px;
+            border: none;
+            border-radius: 8px;
+            background: #087fba;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #audioButton:hover {
+            background: #05a8e8;
+        }
+
+        #status {
+            position: absolute;
+            bottom: 28px;
+            right: 25px;
+            z-index: 10;
+            font-size: 13px;
+            color: #ffffff;
+            background: rgba(0,0,0,0.6);
+            padding: 10px 15px;
+            border-radius: 8px;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "../build/three.module.js",
+            "three/addons/": "./jsm/"
+        }
+    }
+    </script>
+</head>
+
+<body>
+
+    <div id="info">
+        <h1>ESCENARIO 3D</h1>
+        <p>Modelo: Taunt.fbx</p>
+        <p>Motor gráfico: Three.js</p>
+        <p>Ambiente: HDR</p>
+        <p>Controles: Mouse y rueda</p>
+    </div>
+
+    <button id="audioButton">
+        ACTIVAR MÚSICA
+    </button>
+
+    <div id="status">
+        Cargando escenario...
+    </div>
+
+    <script type="module">
+
+        // ==========================================
+        // IMPORTACIÓN DE LIBRERÍAS
+        // ==========================================
+
+        import * as THREE from 'three';
+
+        import { OrbitControls } from
+        'three/addons/controls/OrbitControls.js';
+
+        import { FBXLoader } from
+        'three/addons/loaders/FBXLoader.js';
+
+        import { RGBELoader } from
+        'three/addons/loaders/RGBELoader.js';
+
+
+        // ==========================================
+        // VARIABLES GLOBALES
+        // ==========================================
+
+        let camera;
+        let scene;
+        let renderer;
+        let controls;
+
+        let model;
+        let mixer;
+
+        let sound;
+        let audioReady = false;
+
+        const clock = new THREE.Clock();
+
+        const status = document.getElementById("status");
+        const audioButton = document.getElementById("audioButton");
+
+
+        // ==========================================
+        // INICIALIZACIÓN
+        // ==========================================
+
+        init();
+
+        function init() {
+
+            // ESCENA
+
+            scene = new THREE.Scene();
+
+            scene.background = new THREE.Color(0x202530);
+
+            // CÁMARA
+
+            camera = new THREE.PerspectiveCamera(
+                45,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                2000
+            );
+
+            camera.position.set(7, 5, 9);
+
+            // RENDERIZADOR
+
+            renderer = new THREE.WebGLRenderer({
+                antialias: true
+            });
+
+            renderer.setSize(
+                window.innerWidth,
+                window.innerHeight
+            );
+
+            renderer.setPixelRatio(
+                Math.min(window.devicePixelRatio, 2)
+            );
+
+            renderer.shadowMap.enabled = true;
+
+            renderer.shadowMap.type =
+                THREE.PCFSoftShadowMap;
+
+            renderer.outputColorSpace =
+                THREE.SRGBColorSpace;
+
+            renderer.toneMapping =
+                THREE.ACESFilmicToneMapping;
+
+            renderer.toneMappingExposure = 1;
+
+            document.body.appendChild(renderer.domElement);
+
+
+            // ==========================================
+            // ILUMINACIÓN
+            // ==========================================
+
+            const ambientLight = new THREE.HemisphereLight(
+                0xffffff,
+                0x444455,
+                2
+            );
+
+            scene.add(ambientLight);
+
+            const directionalLight =
+                new THREE.DirectionalLight(
+                    0xffffff,
+                    3
+                );
+
+            directionalLight.position.set(5, 10, 5);
+
+            directionalLight.castShadow = true;
+
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+
+            scene.add(directionalLight);
+
+
+            const pointLight = new THREE.PointLight(
+                0x65cfff,
+                30,
+                20
+            );
+
+            pointLight.position.set(-5, 4, -4);
+
+            scene.add(pointLight);
+
+
+            // ==========================================
+            // CARGAR AMBIENTE HDR
+            // ==========================================
+
+            const rgbeLoader = new RGBELoader();
+
+            rgbeLoader.load(
+                'models/rgbe/escenario.hdr',
+
+                function(texture) {
+
+                    texture.mapping =
+                        THREE.EquirectangularReflectionMapping;
+
+                    scene.background = texture;
+
+                    scene.environment = texture;
+
+                    status.textContent =
+                        "Ambiente HDR cargado";
+
+                },
+
+                undefined,
+
+                function(error) {
+
+                    console.error(
+                        "Error al cargar HDR:",
+                        error
+                    );
+
+                    status.textContent =
+                        "No se pudo cargar el HDR";
+
+                }
+            );
+
+
+            // ==========================================
+            // CREACIÓN DEL PISO CON TEXTURA
+            // ==========================================
+
+            const textureLoader = new THREE.TextureLoader();
+
+            textureLoader.load(
+                'models/textures/piso.jpg',
+
+                function(texture) {
+
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+
+                    texture.repeat.set(5, 5);
+
+                    texture.colorSpace = THREE.SRGBColorSpace;
+
+                    const floorMaterial =
+                        new THREE.MeshStandardMaterial({
+                            map: texture,
+                            roughness: 0.85,
+                            metalness: 0.05
+                        });
+
+                    const floor = new THREE.Mesh(
+                        new THREE.PlaneGeometry(30, 30),
+                        floorMaterial
+                    );
+
+                    floor.rotation.x = -Math.PI / 2;
+
+                    floor.position.y = 0;
+
+                    floor.receiveShadow = true;
+
+                    scene.add(floor);
+
+                },
+
+                undefined,
+
+                function(error) {
+
+                    console.error(
+                        "Error al cargar textura del piso:",
+                        error
+                    );
+
+                }
+            );
+
+
+            // ==========================================
+            // BASE CUADRADA DEL PERSONAJE
+            // ==========================================
+
+            const platformGeometry =
+                new THREE.BoxGeometry(8, 0.15, 8);
+
+            const platformMaterial =
+                new THREE.MeshStandardMaterial({
+                    color: 0x252c38,
+                    metalness: 0.45,
+                    roughness: 0.5
+                });
+
+            const platform = new THREE.Mesh(
+                platformGeometry,
+                platformMaterial
+            );
+
+            platform.position.y = 0.075;
+
+            platform.receiveShadow = true;
+
+            platform.castShadow = true;
+
+            scene.add(platform);
+
+
+            // ==========================================
+            // CARGA DEL MODELO FBX
+            // ==========================================
+
+            const loader = new FBXLoader();
+
+            loader.load(
+
+                'models/fbx/Samba Dancing.fbx',
+
+                function(object) {
+
+                    model = object;
+
+                    // CALCULAR DIMENSIONES DEL MODELO
+
+                    const box = new THREE.Box3()
+                        .setFromObject(model);
+
+                    const size = new THREE.Vector3();
+
+                    const center = new THREE.Vector3();
+
+                    box.getSize(size);
+
+                    box.getCenter(center);
+
+                    // AJUSTAR ESCALA AUTOMÁTICAMENTE
+
+                    const targetHeight = 3.2;
+
+                    const scale =
+                        targetHeight / size.y;
+
+                    model.scale.setScalar(scale);
+
+                    // CENTRAR PERSONAJE EN LA PLATAFORMA
+
+                    model.position.x =
+                        -center.x * scale;
+
+                    model.position.z =
+                        -center.z * scale;
+
+                    model.position.y =
+                        -box.min.y * scale + 0.16;
+
+                    // CONSERVAR TEXTURAS ORIGINALES
+
+                    model.traverse(function(child) {
+
+                        if (child.isMesh) {
+
+                            child.castShadow = true;
+
+                            child.receiveShadow = true;
+
+                            if (child.material) {
+
+                                const materials =
+                                    Array.isArray(child.material)
+                                    ? child.material
+                                    : [child.material];
+
+                                materials.forEach(material => {
+
+                                    if (material.map) {
+
+                                        material.map.colorSpace =
+                                            THREE.SRGBColorSpace;
+
+                                        material.map.needsUpdate = true;
+
+                                    }
+
+                                });
+
+                            }
+
+                        }
+
+                    });
+
+                    // ANIMACIÓN FBX
+
+                    if (
+                        model.animations &&
+                        model.animations.length > 0
+                    ) {
+
+                        mixer =
+                            new THREE.AnimationMixer(model);
+
+                        const action =
+                            mixer.clipAction(
+                                model.animations[0]
+                            );
+
+                        action.play();
+
+                        console.log(
+                            "Animación cargada correctamente"
+                        );
+
+                    } else {
+
+                        console.warn(
+                            "El FBX no contiene animaciones"
+                        );
+
+                    }
+
+                    scene.add(model);
+
+                    status.textContent =
+                        "Modelo FBX cargado correctamente";
+
+                },
+
+                function(xhr) {
+
+                    if (xhr.lengthComputable) {
+
+                        const progress =
+                            (xhr.loaded / xhr.total) * 100;
+
+                        status.textContent =
+                            "Cargando modelo: " +
+                            progress.toFixed(0) + "%";
+
+                    }
+
+                },
+
+                function(error) {
+
+                    console.error(
+                        "Error al cargar modelo FBX:",
+                        error
+                    );
+
+                    status.textContent =
+                        "Error: revisa la ruta del modelo FBX";
+
+                }
+
+            );
+
+
+            // ==========================================
+            // CONTROLES DE CÁMARA
+            // ==========================================
+
+            controls = new OrbitControls(
+                camera,
+                renderer.domElement
+            );
+
+            controls.target.set(0, 1.6, 0);
+
+            controls.enableDamping = true;
+
+            controls.dampingFactor = 0.05;
+
+            controls.minDistance = 3;
+
+            controls.maxDistance = 20;
+
+            controls.maxPolarAngle = Math.PI / 2;
+
+            controls.update();
+
+
+            // ==========================================
+            // MÚSICA DE FONDO MP3
+            // ==========================================
+
+            const listener =
+                new THREE.AudioListener();
+
+            camera.add(listener);
+
+            sound = new THREE.Audio(listener);
+
+            const audioLoader =
+                new THREE.AudioLoader();
+
+            audioLoader.load(
+
+                'models/rgbe/musica.mp3',
+
+                function(buffer) {
+
+                    sound.setBuffer(buffer);
+
+                    sound.setLoop(true);
+
+                    sound.setVolume(0.35);
+
+                    audioReady = true;
+
+                    audioButton.disabled = false;
+
+                    audioButton.textContent =
+                        "ACTIVAR MÚSICA";
+
+                    console.log(
+                        "Música cargada correctamente"
+                    );
+
+                },
+
+                undefined,
+
+                function(error) {
+
+                    console.error(
+                        "Error al cargar música:",
+                        error
+                    );
+
+                    audioButton.textContent =
+                        "ERROR DE AUDIO";
+
+                }
+
+            );
+
+
+            // ==========================================
+            // BOTÓN PARA ACTIVAR Y DETENER MÚSICA
+            // ==========================================
+
+            audioButton.addEventListener(
+                "click",
+                function() {
+
+                    if (!audioReady) return;
+
+                    if (sound.isPlaying) {
+
+                        sound.pause();
+
+                        audioButton.textContent =
+                            "ACTIVAR MÚSICA";
+
+                    } else {
+
+                        sound.play();
+
+                        audioButton.textContent =
+                            "DETENER MÚSICA";
+
+                    }
+
+                }
+            );
+
+
+            // ==========================================
+            // EVENTO DE REDIMENSIONAMIENTO
+            // ==========================================
+
+            window.addEventListener(
+                "resize",
+                onWindowResize
+            );
+
+
+            // INICIAR ANIMACIÓN
+
+            animate();
+
+        }
+
+
+        // ==========================================
+        // AJUSTAR PANTALLA
+        // ==========================================
+
+        function onWindowResize() {
+
+            camera.aspect =
+                window.innerWidth / window.innerHeight;
+
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(
+                window.innerWidth,
+                window.innerHeight
+            );
+
+        }
+
+
+        // ==========================================
+        // CICLO DE ANIMACIÓN
+        // ==========================================
+
+        function animate() {
+
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+
+            if (mixer) {
+
+                mixer.update(delta);
+
+            }
+
+            controls.update();
+
+            renderer.render(scene, camera);
+
+        }
+
+    </script>
+
+</body>
+</html>
